@@ -40,6 +40,7 @@ def show_ts_lob(ts, values_at_ts, values_at_previous_ts):
     print(f"Midpoint: {ind.midpoint(values_at_ts):.2f} USD")
     print(f"Volume Weighted Midpoint: {ind.VAMP(values_at_ts):.2f} USD")
     print(f"Spread: {ind.spread(values_at_ts):.6f} %")
+    print(f"Normalized Spread: {ind.normalized_spread(values_at_ts):.6f} %")
 
     print("--- VAMP Variance ---")
     print(f"VAMP Var with Midpoint: {ind.VAMP_var_midpoint(values_at_ts):.4f} %, VAMP Ask Var with Midpoint: {ind.VAMP_ask_var_midpoint(ask_values):.4f} %, VAMP Bid Var with Midpoint: {ind.VAMP_bid_var_midpoint(bid_values):.4f} %")
@@ -60,6 +61,21 @@ def show_ts_lob(ts, values_at_ts, values_at_previous_ts):
     print(f"Delta Midpoint: {ind.delta_midpoint(values_at_ts, values_at_previous_ts):.6f} %")
     print(f"Delta VAMP: {ind.delta_VAMP(values_at_ts, values_at_previous_ts):.4f} USD")
     print(f"Delta std Bid: {ind.delta_std_side(bid_values, bid_values_at_previous_ts):.4f}, Delta std Ask: {ind.delta_std_side(ask_values, ask_values_at_previous_ts):.4f}")
+
+    print("---Imbalance of the book---")
+    print(f"imbalance Top: {ind.imbalance_top_of_book(values_at_ts)}")
+    print(f"Multi level imbalance: {ind.imbalance_multi_levels(values_at_ts,5,0.6)}")
+    print(f"Orderflow imbalance: {ind.order_flow_imbalance(values_at_ts,values_at_previous_ts,2,0.05)}")
+
+
+    print("---Slippage---")
+    print(f"Estimated Slippage: {ind.slippage(values_at_ts, quantity_BTC=30, side="buy"):.9f}")
+
+    print("---Slope---")
+    print(f"Orderbook Slope: {ind.orderbook_slope(values_at_ts,5)}")
+
+    print("---BPI---")
+    print(f"BPI: {ind.book_pressure_index(values_at_ts,5)}")
 
     print("========================================================\n")
 
