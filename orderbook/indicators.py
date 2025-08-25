@@ -243,6 +243,41 @@ def spread(values):
     bid_values = values['bid_values']
     return (best_ask(ask_values) - best_bid(bid_values)) if (best_ask(ask_values) is not None and best_bid(bid_values) is not None) else None
 
+def normalized_spread(values):
+    """
+    Calculate the normalized spread in percentage terms using distance-to-mid.
+    
+    Formula:
+        Spread (%) = (best_ask_distance - best_bid_distance) / midpoint * 100
+
+    Args:
+        values (dict): Dictionary with 'bid_values' and 'ask_values', each a list of dicts.
+
+    Returns:
+        float: Normalized spread in %, or None if no valid bid/ask/midpoint.
+    """
+    bid_values = values.get('bid_values', [])
+    ask_values = values.get('ask_values', [])
+
+    best_bid_dist = best_bid(bid_values)
+    best_ask_dist = best_ask(ask_values)
+
+    if best_bid_dist is None or best_ask_dist is None:
+        return None
+
+    # Use midpoint as reference: take first available midpoint from ask or bid
+    midpoint_val = None
+    if ask_values:
+        midpoint_val = ask_values[0].get('midpoint_USD')
+    elif bid_values:
+        midpoint_val = bid_values[0].get('midpoint_USD')
+
+    if midpoint_val is None or midpoint_val == 0:
+        return None
+
+    # Normalized spread in percentage
+    return (best_ask_dist - best_bid_dist) / midpoint_val * 100
+
 # =============================================================
 # Depths, Imbalances, and Ratios
 # =============================================================
@@ -419,3 +454,194 @@ def micro_price(values):
         return None
 
     return (p_ask * q_bid + p_bid * q_ask) / denom
+
+# =============================================================
+# Imbalance of the book
+# =============================================================
+
+def imbalance_top_of_book(values, threshold=0.8):
+    """
+    Calculates top-of-book imbalance in [-1, 1].
+    
+    Formula:
+        imbalance = (Q_bid - Q_ask) / (Q_bid + Q_ask)
+
+    Returns:
+        float imbalance, and also an interpretation string.
+    """
+    q_bid = values and values['bid_values'] and values['bid_values'][0]['size_BTC']
+    q_ask = values and values['ask_values'] and values['ask_values'][-1]['size_BTC']
+
+    if not q_bid or not q_ask or (q_bid + q_ask) == 0:
+        return None, "No data"
+
+    imbalance = (q_bid - q_ask) / (q_bid + q_ask)
+
+    # Interpretation
+    if imbalance >= threshold:
+        interpretation = "Book tilted to BID (buy pressure)"
+    elif imbalance <= -threshold:
+        interpretation = "Book tilted to ASK (sell pressure)"
+    else:
+        interpretation = "Book balanced"
+
+    return float(imbalance), interpretation
+
+def imbalance_multi_levels(values, n_levels=5, threshold=0.6):
+    """
+    Calculates imbalance aggregated over multiple levels, range [-1, 1].
+
+
+    Formula:
+    imbalance = (Σ Q_bid - Σ Q_ask) / (Σ Q_bid + Σ Q_ask)
+
+
+    Interpretation similar to top-of-book imbalance.
+    """
+    bid_values = values.get('bid_values', [])[:n_levels]
+    ask_values = values.get('ask_values', [])[-n_levels:]
+
+
+    total_bid = sum(lvl['size_BTC'] for lvl in bid_values)
+    total_ask = sum(lvl['size_BTC'] for lvl in ask_values)
+
+
+    if (total_bid + total_ask) == 0:
+      return None, "No data"
+
+
+    imbalance = (total_bid - total_ask) / (total_bid + total_ask)
+
+
+    if imbalance >= threshold:
+     interpretation = "Book tilted to BID (buy pressure)"
+    elif imbalance <= -threshold:
+     interpretation = "Book tilted to ASK (sell pressure)"
+    else:
+     interpretation = "Book balanced"
+
+    return float(imbalance), interpretation
+
+def order_flow_imbalance(current_values, previous_values, n_levels=1, threshold=0.05):
+    """
+    Compute OFI (Order Flow Imbalance) between two snapshots using size_BTC over n_levels.
+
+    Returns a tuple:
+        (OFI value, interpretation)
+
+    Interpretation:
+        - "Buy pressure" if OFI > threshold
+        - "Sell pressure" if OFI < -threshold
+        - "Balanced" if |OFI| <= threshold
+    """
+    bid_now = sum(l['size_BTC'] for l in current_values.get('bid_values', [])[:n_levels])
+    ask_now = sum(l['size_BTC'] for l in current_values.get('ask_values', [])[-n_levels:])
+    bid_prev = sum(l['size_BTC'] for l in previous_values.get('bid_values', [])[:n_levels])
+    ask_prev = sum(l['size_BTC'] for l in previous_values.get('ask_values', [])[-n_levels:])
+
+    delta_bid = bid_now - bid_prev
+    delta_ask = ask_now - ask_prev
+
+    denom = delta_bid + delta_ask
+    if denom == 0:
+        return None, "No change"
+
+    ofi = (delta_bid - delta_ask) / denom
+
+    # Interpretation based on threshold
+    if ofi > threshold:
+        interpretation = "Buy pressure"
+    elif ofi < -threshold:
+        interpretation = "Sell pressure"
+    else:
+        interpretation = "Balanced"
+
+    return float(ofi), interpretation
+
+# =============================================================
+# Slippage
+# =============================================================
+
+def slippage(values, quantity_BTC, side="buy"):
+    """
+    Estimate slippage of a market order of given size using order book levels.
+    """
+    bid_values = values.get('bid_values', [])
+    ask_values = values.get('ask_values', [])
+
+    midpoint_val = None
+    if ask_values:
+        midpoint_val = ask_values[0].get('midpoint_USD')
+    elif bid_values:
+        midpoint_val = bid_values[0].get('midpoint_USD')
+
+    if midpoint_val is None or midpoint_val == 0:
+        return None
+
+    depth = ask_values if side == "buy" else bid_values
+    if not depth:
+        return None
+
+    filled = 0.0
+    cost = 0.0
+    levels = depth if side == "buy" else reversed(depth)
+    for lvl in levels:
+        size = lvl['size_BTC']
+        price = lvl['midpoint_USD'] + lvl['distance_to_mid']  # approx actual price
+        if filled + size >= quantity_BTC:
+            cost += (quantity_BTC - filled) * price
+            filled = quantity_BTC
+            break
+        else:
+            cost += size * price
+            filled += size
+
+    if filled < quantity_BTC:
+        return None  # not enough depth
+
+    exec_price = cost / quantity_BTC
+    return (exec_price - midpoint_val) / midpoint_val * 100 if side == "buy" else (midpoint_val - exec_price) / midpoint_val * 100
+
+# =============================================================
+# Orderbook Slope using distance to mid
+# =============================================================
+
+def orderbook_slope(values, n_levels=5):
+    """
+    Estimate order book slope using distance_to_mid and size_BTC.
+    """
+    bid_values = values.get('bid_values', [])[:n_levels]
+    ask_values = values.get('ask_values', [])[-n_levels:]
+
+    if not bid_values or not ask_values:
+        return None, None
+
+    bid_depth = sum(l['size_BTC'] for l in bid_values)
+    ask_depth = sum(l['size_BTC'] for l in ask_values)
+
+    bid_slope = abs((bid_values[0]['distance_to_mid'] - bid_values[-1]['distance_to_mid']) / bid_depth if bid_depth > 0 else None)
+    ask_slope = abs((ask_values[-1]['distance_to_mid'] - ask_values[0]['distance_to_mid']) / ask_depth if ask_depth > 0 else None)
+
+    return {
+        "BID": round(float(bid_slope), 6),
+        "ASK": round(float(ask_slope), 6)
+    }
+
+# =============================================================
+# Book Pressure Index (BPI)
+# =============================================================
+
+def book_pressure_index(values, n_levels=5):
+    """
+    Weighted order book pressure using size_BTC and distance_to_mid.
+    BPI > 1 : buying pressure, BPI < 1 : selling pressure
+    """
+    bid_values = values.get('bid_values', [])[:n_levels]
+    ask_values = values.get('ask_values', [])[-n_levels:]
+
+    num = sum(l['size_BTC'] / abs(l['distance_to_mid']) for l in bid_values if l['distance_to_mid'] < 0)
+    den = sum(l['size_BTC'] / abs(l['distance_to_mid']) for l in ask_values if l['distance_to_mid'] > 0)
+
+    if den == 0:
+        return None
+    return num / den
