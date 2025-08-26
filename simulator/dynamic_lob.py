@@ -18,14 +18,6 @@ from simulator.performance import print_performance_summary, get_performance
 from RL.reward import compute_final_reward, compute_reward_at_t
 
 def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, duration=3600):
-    """
-    Run an interactive simulation of a limit order book (LOB).
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing the order book data.
-        initial_cash (float): Initial cash balance in USD.
-        initial_btc (float): Initial BTC balance.
-    """
     print("--------------------------------------------------------")
     print("Starting LOB simulation...")
     targeted_value = initial_cash * target if goal == 'cash' else initial_btc * (1 + target)
@@ -39,14 +31,14 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
 
     sum_rewards = 0.0 
     previous_pnl = 0.0
+    pnl_history = []   # <<< nouvelle variable pour stocker le PnL de chaque étape
 
     print("--------------------------------------------------------")
     print(f"Initial Cash: {initial_cash} USD, Initial BTC: {initial_btc} BTC")
     print(f"Starting simulation at timestamp: {ts} for a duration of {duration} seconds.")
     print("--------------------------------------------------------")
 
-    # Show each timestamp starting from the second one (index 1) because of the calculation of indicators using previous timestamp
-    for step in range(1,duration):
+    for step in range(1, duration):
         ts = df.iloc[step * 40]['timestamp_ns']
         values_at_ts = get_values(ts, df)
         values_at_previous_ts = get_values(ts - 1000000000, df) if ts - 1000000000 in df['timestamp_ns'].values else None
@@ -58,12 +50,7 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
         print_lob.show_ts_lob(ts, values_at_ts, values_at_previous_ts)
         result = action.choose_action(values_at_ts, current_cash, current_btc)
         
-        ### Apply market impact with resiliency after each action (TO DO)
-        
-        if result is None:
-            print("Nothing happened, moving to next timestamp...")
-            continue
-        else:
+        if result is not None:
             current_cash, current_btc = result
             print("--------------------------------------------------------")
             print(f"Updated Cash: {current_cash} USD, Updated BTC: {current_btc} BTC")
@@ -71,19 +58,49 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
             if (current_cash < targeted_value and goal == 'cash') or (current_btc < targeted_value and goal == 'btc'):
                 print(f"Congratulations! You have achieved your goal of liquidating your {goal} under the target of {targeted_value:.2f}.")
                 break
+        else:
+            print("Nothing happened, moving to next timestamp...")
 
-        rw_inter = compute_reward_at_t(get_performance(initial_cash, initial_btc, current_cash, current_btc, values_at_ts, goal, target, duration), sum_rewards, step, previous_pnl)
+        # === Calcul du PnL à CE step ===
+        perf = get_performance(initial_cash, initial_btc, current_cash, current_btc,
+                               values_at_ts, goal, target, duration)
+
+        # Enregistrer le PnL dans l’historique
+        pnl_history.append({
+            "step": step,
+            "pnl": perf["pnl"],
+            "pnl_percentage": perf["pnl_percentage"],
+            "portfolio_value": perf["total_portfolio_value"]
+        })
+
+        # Affichage direct du PnL
+        print(f"PnL at step {step}: {perf['pnl']} USD ({perf['pnl_percentage']:.2f}%)")
+
+        # === Reward ===
+        rw_inter = compute_reward_at_t(perf, sum_rewards, step, previous_pnl)
         reward_at_t = rw_inter[0]
         sum_rewards = rw_inter[1]
         previous_pnl = rw_inter[2]
 
         print(f"Reward at step {step}: {reward_at_t:.4f}, Cumulative Reward: {sum_rewards:.4f}")
-    
-    final_performance = get_performance(initial_cash, initial_btc, current_cash, current_btc, values_at_ts, goal, target, duration)
 
+    # Performance finale
+    final_performance = get_performance(initial_cash, initial_btc, current_cash, current_btc,
+                                        values_at_ts, goal, target, duration)
     print_performance_summary(final_performance)
     print(f"Reward: {compute_final_reward(final_performance, sum_rewards)}")
     print("Simulation ended.")
+
+    # === Récapitulatif complet du PnL à chaque étape ===
+    print("\n================ PnL History Recap ================")
+    for entry in pnl_history:
+        print(f"Step {entry['step']:>4} | PnL: {entry['pnl']:>12.2f} USD | "
+              f"{entry['pnl_percentage']:>6.2f}% | Portfolio: {entry['portfolio_value']:>12.2f} USD")
+    print("===================================================")
+
+    return pnl_history
+
+
         
 
 def main():
