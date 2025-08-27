@@ -106,8 +106,6 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
     print("===================================================")
 
     return pnl_history
-
-
         
 
 def main():

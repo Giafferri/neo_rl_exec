@@ -4,6 +4,7 @@
 import pandas as pd
 from orderbook.timestamp import get_values
 import orderbook.indicators as ind
+import orderbook.print_indicators as pi
     
 def show_ts_lob(ts, values_at_ts, values_at_previous_ts):
     """
@@ -34,50 +35,8 @@ def show_ts_lob(ts, values_at_ts, values_at_previous_ts):
         price = bid['midpoint_USD'] * (1 + bid['distance_to_mid'])
         print(f"{bid['side']:4} | {bid['level']:5} | {price:11.2f} | {bid['midpoint_USD']:14.2f} | {bid['distance_to_mid']:12.6f} | {bid['notional_USD']:14.2f} | {bid['size_BTC']:10.4f}")
     
-    print("\n================ INDICATORS =============================")
-
-    print("--- Midpoint & Spread ---")
-    print(f"Midpoint: {ind.midpoint(values_at_ts):.2f} USD")
-    print(f"Volume Weighted Midpoint: {ind.VAMP(values_at_ts):.2f} USD")
-    print(f"Spread: {ind.spread(values_at_ts):.6f} %")
-    print(f"Normalized Spread: {ind.normalized_spread(values_at_ts):.6f} %")
-
-    print("--- VAMP Variance ---")
-    print(f"VAMP Var with Midpoint: {ind.VAMP_var_midpoint(values_at_ts):.4f} %, VAMP Ask Var with Midpoint: {ind.VAMP_ask_var_midpoint(ask_values):.4f} %, VAMP Bid Var with Midpoint: {ind.VAMP_bid_var_midpoint(bid_values):.4f} %")
-
-    print("--- Weighted Midpoints ---")
-    print(f"Volume Ajusted Midpoint Price: {ind.VAMP_bid(bid_values):.2f} USD, Weighted Ask Midpoint: {ind.VAMP_ask(ask_values):.2f} USD")
-    print(f"Microprice: {ind.micro_price(values_at_ts):.9f} USD")
-
-    print("--- Liquidity ---")
-    print(f"Best Bid: {ind.best_bid(bid_values):.6f} %, Best Ask: {ind.best_ask(ask_values):.6f} %")
-    print(f"Best Bid Size: {ind.best_bid_size(bid_values):.4f} BTC, Best Ask Size: {ind.best_ask_size(ask_values):.4f} BTC")
-    print(f"Bid Depth: {ind.bid_depth(bid_values):.4f} USD, Ask Depth: {ind.ask_depth(ask_values):.4f} USD")
-    print(f"Liquidity Ratio: {ind.liquidity_ratio(values_at_ts):.4f}")
-    print(f"Standard Deviation Bid: {ind.std_side(bid_values):.4f}, Standard Deviation Ask: {ind.std_side(ask_values):.4f}")
-
-    print("--- Deltas ---")
-    print(f"Delta Spread: {ind.delta_spread(values_at_ts, values_at_previous_ts):.6f} %")
-    print(f"Delta Midpoint: {ind.delta_midpoint(values_at_ts, values_at_previous_ts):.6f} %")
-    print(f"Delta VAMP: {ind.delta_VAMP(values_at_ts, values_at_previous_ts):.4f} USD")
-    print(f"Delta std Bid: {ind.delta_std_side(bid_values, bid_values_at_previous_ts):.4f}, Delta std Ask: {ind.delta_std_side(ask_values, ask_values_at_previous_ts):.4f}")
-
-    print("---Imbalance of the book---")
-    print(f"imbalance Top: {ind.imbalance_top_of_book(values_at_ts)}")
-    print(f"Multi level imbalance: {ind.imbalance_multi_levels(values_at_ts,5,0.6)}")
-    print(f"Orderflow imbalance: {ind.order_flow_imbalance(values_at_ts,values_at_previous_ts,2,0.05)}")
-
-
-    print("---Slippage---")
-    print(f"Estimated Slippage: {ind.slippage(values_at_ts, quantity_BTC=30, side="buy"):.9f}")
-
-    print("---Slope---")
-    print(f"Orderbook Slope: {ind.orderbook_slope(values_at_ts,5)}")
-
-    print("---BPI---")
-    print(f"BPI: {ind.book_pressure_index(values_at_ts,5)}")
-
-    print("========================================================\n")
+    # print indicators
+    pi.print_indicators(ts, values_at_ts, values_at_previous_ts)
 
 def show_lob(ts_start, nb_ts=5, df=None):
     """

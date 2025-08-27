@@ -305,10 +305,6 @@ def ask_depth(ask_values):
     if not ask_values:
         return None
     return sum(ask['notional_USD'] for ask in ask_values) if any(ask['notional_USD'] > 0 for ask in ask_values) else None
-    
-
-def imbalance(df):
-    pass
 
 def liquidity_ratio(values):
     """
@@ -645,3 +641,57 @@ def book_pressure_index(values, n_levels=5):
     if den == 0:
         return None
     return num / den
+
+# =============================================================
+# Values for RL environment
+# =============================================================
+
+def get_rl_values(values, previous_values=None):
+    d = {
+        # top & mid
+        "best_bid": best_bid(values.get('bid_values', [])),
+        "best_ask": best_ask(values.get('ask_values', [])),
+        "best_bid_size": best_bid_size(values.get('bid_values', [])),
+        "best_ask_size": best_ask_size(values.get('ask_values', [])),
+        "midpoint": midpoint(values),
+
+        # spreads & microstructure
+        "spread": spread(values),
+        "normalized_spread": normalized_spread(values),
+        "micro_price": micro_price(values),
+
+        # depths & ratios
+        "bid_depth": bid_depth(values.get('bid_values', [])),
+        "ask_depth": ask_depth(values.get('ask_values', [])),
+        "liquidity_ratio": liquidity_ratio(values),
+        "book_pressure_index": book_pressure_index(values),
+
+        # VAMP family
+        "vamp": VAMP(values),
+        "vamp_var_midpoint": VAMP_var_midpoint(values),
+        "vamp_ask": VAMP_ask(values.get('ask_values', [])),
+        "vamp_ask_var_midpoint": VAMP_ask_var_midpoint(values.get('ask_values', [])),
+        "vamp_bid": VAMP_bid(values.get('bid_values', [])),
+        "vamp_bid_var_midpoint": VAMP_bid_var_midpoint(values.get('bid_values', [])),
+
+        # stats
+        "std_bid": std_side(values.get('bid_values', [])),
+        "std_ask": std_side(values.get('ask_values', [])),
+
+        # imbalance
+        "imbalance_top_of_book": imbalance_top_of_book(values)[0],
+        "imbalance_multi_levels": imbalance_multi_levels(values)[0],
+    }
+
+    # If previous_values is given at this step
+    if previous_values is not None:
+        d.update({
+            "delta_spread": delta_spread(values, previous_values),
+            "delta_midpoint": delta_midpoint(values, previous_values),
+            "delta_vamp": delta_VAMP(values, previous_values),
+            "delta_std_bid": delta_std_side(values.get('bid_values', []), previous_values.get('bid_values', [])),
+            "delta_std_ask": delta_std_side(values.get('ask_values', []), previous_values.get('ask_values', [])),
+            "orderflow_imbalance": order_flow_imbalance(values, previous_values)[0],
+        })
+
+    return d
