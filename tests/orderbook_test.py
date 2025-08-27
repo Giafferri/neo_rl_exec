@@ -8,7 +8,7 @@ paths = ["data/replay/20200101.feather",
          "data/replay/20200102.feather", 
          "data/replay/20200103.feather"]
 
-nb_timestamps = 50
+nb_timestamps = 300
 
 df = load_orderbook_data(paths)
 ts = 1577822404279921920
