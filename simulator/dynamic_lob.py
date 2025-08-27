@@ -14,7 +14,7 @@ from orderbook.timestamp import get_values
 from orderbook.orderbook_files import load_orderbook_data  
 import orderbook.print_lob as print_lob
 import simulator.action as action
-from simulator.performance import print_performance_summary, get_performance
+from simulator.performance import print_performance_summary, get_performance, slippage
 from RL.reward import compute_final_reward, compute_reward_at_t
 
 def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, duration=3600):
@@ -51,13 +51,20 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
         result = action.choose_action(values_at_ts, current_cash, current_btc)
         
         if result is not None:
-            current_cash, current_btc = result
+            current_cash, current_btc, trade_size, action_side = result
             print("--------------------------------------------------------")
             print(f"Updated Cash: {current_cash} USD, Updated BTC: {current_btc} BTC")
             print("--------------------------------------------------------")
             if (current_cash < targeted_value and goal == 'cash') or (current_btc < targeted_value and goal == 'btc'):
                 print(f"Congratulations! You have achieved your goal of liquidating your {goal} under the target of {targeted_value:.2f}.")
                 break
+
+              # === SLIPPAGE ===
+            if action_side in ["buy", "sell"] and trade_size > 0:
+                slip = slippage(values_at_ts, quantity_BTC=trade_size, side=action_side)
+                if slip is not None:
+                 print(f"Slippage ({action_side}, {trade_size:.4f} BTC) at step {step}: {slip:.4f}%")
+
         else:
             print("Nothing happened, moving to next timestamp...")
 

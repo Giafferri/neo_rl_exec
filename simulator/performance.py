@@ -33,6 +33,65 @@ def get_performance(initial_cash, initial_btc, current_cash, current_btc, values
         'goal': goal
     }
 
+def slippage(values, quantity_BTC=None, quantity_USD=None, side="buy"):
+    """
+    Estimate slippage of a market order using order book levels.
+    Supports input in BTC or USD.
+    
+    Args:
+        values (dict): snapshot of orderbook values.
+        quantity_BTC (float, optional): order size in BTC.
+        quantity_USD (float, optional): order size in USD.
+        side (str): "buy" or "sell".
+    
+    Returns:
+        float: slippage in % relative to midpoint, or None if not enough depth.
+    """
+    bid_values = values.get('bid_values', [])
+    ask_values = values.get('ask_values', [])
+
+    # Get midpoint
+    midpoint_val = None
+    if ask_values:
+        midpoint_val = ask_values[0].get('midpoint_USD')
+    elif bid_values:
+        midpoint_val = bid_values[0].get('midpoint_USD')
+
+    if midpoint_val is None or midpoint_val == 0:
+        return None
+
+    # Convert USD -> BTC if needed
+    if quantity_BTC is None and quantity_USD is not None:
+        quantity_BTC = quantity_USD / midpoint_val
+    elif quantity_BTC is None:
+        raise ValueError("You must provide either quantity_BTC or quantity_USD")
+
+    # Select depth side
+    depth = ask_values if side == "buy" else bid_values
+    if not depth:
+        return None
+
+    filled = 0.0
+    cost = 0.0
+    levels = depth if side == "buy" else reversed(depth)
+
+    for lvl in levels:
+        size = lvl['size_BTC']
+        price = lvl['midpoint_USD'] + lvl['distance_to_mid']  # approx actual price
+        if filled + size >= quantity_BTC:
+            cost += (quantity_BTC - filled) * price
+            filled = quantity_BTC
+            break
+        else:
+            cost += size * price
+            filled += size
+
+    if filled < quantity_BTC:
+        return None  # not enough depth
+
+    exec_price = cost / quantity_BTC
+    return (exec_price - midpoint_val) / midpoint_val * 100 if side == "buy" else (midpoint_val - exec_price) / midpoint_val * 100
+
 
 def print_performance_summary(performance):
     print("--------------------------------------------------------")

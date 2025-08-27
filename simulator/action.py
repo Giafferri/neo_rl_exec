@@ -72,7 +72,7 @@ def buy(amount, ask_values, current_cash, current_btc):
     average_buy_price_distance_to_mid = (average_buy_price - ask_values[0]['midpoint_USD']) / ask_values[0]['midpoint_USD'] if total_btc > 0 else 0
     print(f"Average buy price distance to mid: {average_buy_price_distance_to_mid:.6f} %")
 
-    return [current_cash, current_btc]
+    return [current_cash, current_btc, total_btc, "buy"]
 
 def sell(amount, bid_values, current_cash, current_btc):
     print("You chose to sell BTC.")
@@ -113,7 +113,8 @@ def sell(amount, bid_values, current_cash, current_btc):
     average_sell_price_distance_to_mid = (average_sell_price - bid_values[0]['midpoint_USD']) / bid_values[0]['midpoint_USD'] if total_btc_sold > 0 else 0
     print(f"Average sell price distance to mid: {average_sell_price_distance_to_mid:.6f} %")
 
-    return [current_cash, current_btc]
+    return [current_cash, current_btc, total_btc_sold, "sell"]
+
 
 def choose_action(values, current_cash, current_btc):
     print("Choose an action:")
@@ -131,7 +132,7 @@ def choose_action(values, current_cash, current_btc):
         return sell(amount, bid_values, current_cash, current_btc)
     elif input_action == 'h':
         print("You chose to hold.")
-        return [current_cash, current_btc]
+        return [current_cash, current_btc, 0, "hold"]
     elif input_action == 'q':
         print("Exiting the simulation.")
         exit()
