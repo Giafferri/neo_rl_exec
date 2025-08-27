@@ -38,7 +38,12 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
     print(f"Starting simulation at timestamp: {ts} for a duration of {duration} seconds.")
     print("--------------------------------------------------------")
 
+    previous_cumulative_pnl = 0.0
+    previous_portfolio_value = initial_cash + initial_btc * df.iloc[40]["midpoint_USD"]
+
+
     for step in range(1, duration):
+
         ts = df.iloc[step * 40]['timestamp_ns']
         values_at_ts = get_values(ts, df)
         values_at_previous_ts = get_values(ts - 1000000000, df) if ts - 1000000000 in df['timestamp_ns'].values else None
@@ -71,17 +76,35 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
         # === Calcul du PnL à CE step ===
         perf = get_performance(initial_cash, initial_btc, current_cash, current_btc,
                                values_at_ts, goal, target, duration)
+        
+        cumulative_pnl = perf["pnl"]
+
+        step_pnl = cumulative_pnl - previous_cumulative_pnl   # variation depuis le step précédent
+        previous_cumulative_pnl = cumulative_pnl 
+
+        current_portfolio_value = perf["total_portfolio_value"]
+
+        # Step PnL (différence entre portefeuille actuel et précédent)
+        step_pnl = current_portfolio_value - previous_portfolio_value
+
+        # Step PnL en %
+        step_pnl_percentage = (step_pnl / previous_portfolio_value) * 100 if previous_portfolio_value > 0 else 0
+
+        previous_portfolio_value = current_portfolio_value
 
         # Enregistrer le PnL dans l’historique
         pnl_history.append({
             "step": step,
-            "pnl": perf["pnl"],
-            "pnl_percentage": perf["pnl_percentage"],
-            "portfolio_value": perf["total_portfolio_value"]
+            "cumulative_pnl": perf["pnl"],                  # PnL total depuis le début
+            "cumulative_pnl_percentage": perf["pnl_percentage"],  
+            "step_pnl": step_pnl,                          
+            "step_pnl_percentage": step_pnl_percentage,     
+            "portfolio_value": current_portfolio_value
         })
 
         # Affichage direct du PnL
-        print(f"PnL at step {step}: {perf['pnl']} USD ({perf['pnl_percentage']:.2f}%)")
+        print(f"Cumulative PnL at step {step}: {cumulative_pnl:.2f} USD ({perf['pnl_percentage']:.2f}%)")
+        print(f"Step PnL: {step_pnl:.2f} USD")
 
         # === Reward ===
         rw_inter = compute_reward_at_t(perf, sum_rewards, step, previous_pnl)
@@ -101,8 +124,10 @@ def run(df, initial_cash=50000000, initial_btc=250, goal='cash', target=0.1, dur
     # === Récapitulatif complet du PnL à chaque étape ===
     print("\n================ PnL History Recap ================")
     for entry in pnl_history:
-        print(f"Step {entry['step']:>4} | PnL: {entry['pnl']:>12.2f} USD | "
-              f"{entry['pnl_percentage']:>6.2f}% | Portfolio: {entry['portfolio_value']:>12.2f} USD")
+        print(f"Step {entry['step']:>4} | "
+              f"Step PnL: {entry['step_pnl']:>10.2f} USD ({entry['step_pnl_percentage']:>6.2f}%) | "
+              f"Cumulative PnL: {entry['cumulative_pnl']:>10.2f} USD ({entry['cumulative_pnl_percentage']:>6.2f}%) | "
+              f"Portfolio: {entry['portfolio_value']:>12.2f} USD")
     print("===================================================")
 
     return pnl_history
